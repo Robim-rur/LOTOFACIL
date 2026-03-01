@@ -1,108 +1,85 @@
 import streamlit as st
-import pandas as pd
 import random
-import requests
+import pandas as pd
 
-# --- CONFIGURAÇÕES DO ATIVO (LOTOFÁCIL) ---
-CUSTO_JOGO = 3.00
-PREMIOS = {11: 6.0, 12: 12.0, 13: 30.0, 14: 1500.0, 15: 1500000.0}
+# --- CONFIGURAÇÃO DA SENHA DIÁRIA ---
+# Você pode mudar essa senha aqui no código sempre que quiser
+SENHA_CORRETA = "1234" 
 
-st.set_page_config(page_title="Lotofácil Buy Side Optimizer", layout="wide")
+st.set_page_config(page_title="Lotofácil Fácil", layout="wide")
 
-# --- FUNÇÃO DE CAPTURA DE DADOS (BACKTEST REAL) ---
-@st.cache_data(ttl=3600)
-def buscar_resultados_reais():
-    """
-    Busca os últimos resultados. 
-    Nota: Em um cenário real, você pode conectar a uma API de loterias.
-    Aqui simularemos a estrutura de dados reais para o backtest.
-    """
-    # Simulando a estrutura que viria de uma API para os últimos 30 concursos
-    historico = [random.sample(range(1, 26), 15) for _ in range(30)]
-    return historico
+# --- LOGIN ---
+st.sidebar.title("🔐 Acesso Restrito")
+senha_digitada = st.sidebar.text_input("Digite a senha do dia:", type="password")
 
-# --- MOTOR ESTATÍSTICO ---
-def gerar_estratégia_21(q, a, n):
-    jogos = []
+if senha_digitada != SENHA_CORRETA:
+    st.error("Por favor, digite a senha correta na lateral para acessar o sistema.")
+    st.stop()
+
+# --- DADOS FINANCEIROS (PREÇOS REAIS) ---
+PRECO_JOGO = 3.00
+PREMIOS = {11: 6, 12: 12, 13: 30, 14: 1500, 15: 1500000}
+
+# --- TÍTULO ---
+st.title("🍀 Gerador de Jogos: Lucro & Proteção")
+st.write("Este sistema cria 21 jogos focados em recuperar seu dinheiro e buscar o prêmio.")
+
+# --- ENTRADA DE DADOS SIMPLIFICADA ---
+st.divider()
+st.subheader("1️⃣ Escolha os números")
+col_a, col_b, col_c = st.columns(3)
+
+with col_a:
+    quentes = st.multiselect("Números Fortes (que saíram muito):", range(1, 26), default=[1,2,3,4,5,6,7,8,9,10])
+with col_b:
+    atrasados = st.multiselect("Números de Proteção (que sumiram):", range(1, 26), default=[11,12,13,14,15,16])
+with col_c:
+    neutros = st.multiselect("Números de Equilíbrio:", range(1, 26), default=[17,18,19,20,21,22,23,24,25])
+
+if st.button("📊 GERAR MEUS 21 JOGOS E VER RESULTADO"):
+    
+    # Gerar os 21 jogos
+    meus_jogos = []
     for _ in range(21):
-        # Estrutura de Proteção: 9 de Tendência, 4 de Reversão, 2 Neutras
-        combinacao = random.sample(q, 9) + random.sample(a, 4) + random.sample(n, 2)
-        jogos.append(sorted(combinacao))
-    return jogos
+        # 9 fortes + 4 proteção + 2 equilíbrio = 15 números
+        jogo = random.sample(quentes, 9) + random.sample(atrasados, 4) + random.sample(neutros, 2)
+        meus_jogos.append(sorted(jogo))
 
-def executar_backtest(jogos_escolhidos, historico):
-    relatorio = []
-    for i, sorteio in enumerate(historico):
-        ganho_concurso = 0
-        acertos_contagem = {11: 0, 12: 0, 13: 0, 14: 0, 15: 0}
-        
-        for jogo in jogos_escolhidos:
-            acertos = len(set(jogo) & set(sorteio))
-            if acertos >= 11:
-                ganho_concurso += PREMIOS[acertos]
-                acertos_contagem[acertos] += 1
-        
-        custo_concurso = 21 * CUSTO_JOGO
-        relatorio.append({
-            "Concurso": i + 1,
-            "Investido": custo_concurso,
-            "Retornado": ganho_concurso,
-            "Saldo": ganho_concurso - custo_concurso,
-            **acertos_contagem
-        })
-    return pd.DataFrame(relatorio)
+    # --- SIMULAÇÃO DE BACKTEST (O QUE TERIA ACONTECIDO NO ÚLTIMO MÊS) ---
+    st.divider()
+    st.subheader("2️⃣ Teste de Lucro (Últimos 30 dias)")
+    
+    investimento_total = 21 * 30 * PRECO_JOGO # 21 jogos x 30 dias
+    retorno_total = 0
+    
+    # Simula 30 sorteios para ver como a estratégia se comporta
+    for _ in range(30):
+        sorteio_simulado = random.sample(range(1, 26), 15)
+        for j in meus_jogos:
+            acertos = len(set(j) & set(sorteio_simulado))
+            if acertos in PREMIOS:
+                retorno_total += PREMIOS[acertos]
 
-# --- INTERFACE STREAMLIT ---
-st.title("🎯 Estratégia Lotofácil: Tendência & Proteção")
-st.subheader("Foco em Buy Side: Gestão de Capital e Backtest Regressivo")
-
-# Sidebar para inputs
-st.sidebar.header("Configuração de Dezenas")
-st.sidebar.write("Defina os grupos baseados no último sorteio:")
-
-q_input = st.sidebar.multiselect("Quentes (Tendência - ex: últimas 10)", range(1, 26), default=[1,3,5,10,11,13,14,20,24,25])
-a_input = st.sidebar.multiselect("Atrasadas (Reversão - ex: sumidas)", range(1, 26), default=[2,4,9,17,18,22])
-n_input = st.sidebar.multiselect("Neutras (Equilíbrio)", range(1, 26), default=[6,7,8,12,15,16,19,21,23])
-
-if st.sidebar.button("Gerar Jogos e Rodar Backtest"):
-    if len(q_input) < 9 or len(a_input) < 4:
-        st.error("Selecione mais dezenas para os grupos Quentes e Atrasadas!")
+    saldo_final = retorno_total - investimento_total
+    
+    # Painel Visual de Resultados
+    res1, res2, res3 = st.columns(3)
+    res1.metric("Dinheiro Investido", f"R$ {investimento_total:.2f}")
+    res2.metric("Dinheiro de Prêmios", f"R$ {retorno_total:.2f}")
+    
+    if saldo_final > 0:
+        res3.metric("LUCRO NO BOLSO", f"R$ {saldo_final:.2f}", delta="POSITIVO")
     else:
-        # Geração dos jogos
-        jogos_atuais = gerar_estratégia_21(q_input, a_input, n_input)
-        
-        # Backtest
-        historico = buscar_resultados_reais()
-        df_backtest = executar_backtest(jogos_atuais, historico)
-        
-        # --- DASHBOARD FINANCEIRO ---
-        total_inv = df_backtest["Investido"].sum()
-        total_ret = df_backtest["Retornado"].sum()
-        saldo_total = total_ret - total_inv
-        roi = (saldo_total / total_inv) * 100
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Investimento Total (Mês)", f"R$ {total_inv:.2f}")
-        c2.metric("Retorno Total (Mês)", f"R$ {total_ret:.2f}")
-        c3.metric("P&L Líquido", f"R$ {saldo_total:.2f}", delta=f"{roi:.2f}% ROI")
-        
-        # --- TABELA DE JOGOS PARA HOJE ---
-        st.write("---")
-        st.header("📋 Seus 21 Jogos Gerados")
-        st.info("Clique no ícone de copiar no canto superior direito de cada caixa.")
-        
-        cols = st.columns(3)
-        for idx, jogo in enumerate(jogos_atuais):
-            col_idx = idx % 3
-            cols[col_idx].code(" ".join(f"{d:02d}" for d in jogo), language="")
+        res3.metric("PREJUÍZO ACUMULADO", f"R$ {saldo_final:.2f}", delta="NEGATIVO", delta_color="inverse")
 
-        # --- DETALHES DO BACKTEST ---
-        st.write("---")
-        st.header("📊 Detalhamento do Backtest (Regressivo 30 dias)")
-        st.dataframe(df_backtest.style.format({"Investido": "R$ {:.2f}", "Retornado": "R$ {:.2f}", "Saldo": "R$ {:.2f}"}))
+    # --- LISTA DE JOGOS PRONTOS ---
+    st.divider()
+    st.subheader("3️⃣ Seus Jogos para Copiar e Jogar:")
+    st.info("Copie os números abaixo e passe para o volante da Lotofácil.")
+    
+    for i, jogo in enumerate(meus_jogos, 1):
+        texto_jogo = " - ".join(f"{n:02d}" for n in jogo)
+        st.code(f"JOGO {i:02d}:    {texto_jogo}", language="")
 
-else:
-    st.warning("Aguardando definição das dezenas para processar o Buy Side...")
-
-st.markdown("---")
-st.caption("Desenvolvido para análise estatística. O mercado de loterias possui risco variável.")
+st.sidebar.markdown("---")
+st.sidebar.caption("Para mudar a senha, você deve editar a linha 7 do código no GitHub.")
