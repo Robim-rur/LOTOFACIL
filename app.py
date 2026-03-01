@@ -5,14 +5,14 @@ import pandas_ta as ta
 
 # --- CONFIGURAÇÃO ---
 SENHA_ACESSO = "1234"
-st.set_page_config(page_title="Scanner Buy Side 178", layout="wide")
+st.set_page_config(page_title="Scanner Buy Side Pro", layout="wide")
 
 # --- LOGIN ---
 if "logado" not in st.session_state:
     st.session_state["logado"] = False
 
 if not st.session_state["logado"]:
-    st.title("🌙 Terminal Noturno")
+    st.title("🌙 Terminal de Análise Noturna")
     senha = st.text_input("Senha:", type="password")
     if st.button("ACESSAR"):
         if senha == SENHA_ACESSO:
@@ -43,37 +43,56 @@ ATIVOS_SCAN = sorted(set([
     "KNCR11.SA","KNIP11.SA","CPTS11.SA","IRDM11.SA","DIVO11.SA","NDIV11.SA","SPUB11.SA"
 ]))
 
-# --- INTERFACE ---
-st.title("🚀 Scanner Buy Side: Estratégia 5% Mensal")
-cap_usuario = st.sidebar.number_input("Capital Total (R$):", value=5000.0)
-
-if st.button("🔍 ESCANEAR OPORTUNIDADES AGORA"):
+# --- MOTOR DE ANÁLISE ---
+def scan_mercado(lista):
     encontrados = []
     barra = st.progress(0)
     
-    for i, t in enumerate(ATIVOS_SCAN):
+    for i, t in enumerate(lista):
         try:
-            df = yf.download(t, period="30d", interval="1d", progress=False)
-            if len(df) < 15: continue
+            df = yf.download(t, period="60d", interval="1d", progress=False)
+            if len(df) < 20: continue
             
             df['EMA9'] = ta.ema(df['Close'], length=9)
             
-            # Setup 9.1 de Compra
+            # Setup 9.1 de Compra (Virada da Média)
             if df['EMA9'].iloc[-1] > df['EMA9'].iloc[-2] and df['EMA9'].iloc[-2] <= df['EMA9'].iloc[-3]:
-                p = df['Close'].iloc[-1]
+                p_atual = df['Close'].iloc[-1]
+                p_entrada = df['High'].iloc[-1] + 0.01
+                p_stop = df['Low'].iloc[-1] - 0.01
+                
+                # Cálculo de Queda Prévia (Quanto caiu nos últimos 3 dias antes do sinal)
+                preco_3_dias_atras = df['High'].iloc[-4]
+                queda_previa = ((p_atual / preco_3_dias_atras) - 1) * 100
+                
+                # Cálculo do Risco da Operação (Distância do Stop)
+                risco_operacao = ((p_stop / p_entrada) - 1) * 100
+                
                 encontrados.append({
-                    "Ticker": t.replace(".SA", ""),
-                    "Preço": f"R$ {p:.2f}",
-                    "Entrada": f"R$ {df['High'].iloc[-1] + 0.01:.2f}",
-                    "Stop": f"R$ {df['Low'].iloc[-1] - 0.01:.2f}",
-                    "Alvo (+5%)": f"R$ {p * 1.05:.2f}"
+                    "Ativo": t.replace(".SA", ""),
+                    "Preço Fech.": f"R$ {p_atual:.2f}",
+                    "Queda Acumulada (%)": f"{queda_previa:.2f}%",
+                    "Entrada (Start)": f"R$ {p_entrada:.2f}",
+                    "Alvo (+5%)": f"R$ {p_entrada * 1.05:.2f}",
+                    "Stop Loss (%)": f"{risco_operacao:.2f}%"
                 })
         except: continue
-        barra.progress((i + 1) / len(ATIVOS_SCAN))
-    
-    if encontrados:
-        st.table(pd.DataFrame(encontrados))
-    else:
-        st.info("Nenhum sinal hoje.")
+        barra.progress((i + 1) / len(lista))
+    return encontrados
+
+# --- INTERFACE ---
+st.title("🚀 Scanner de Oportunidades (Buy Side)")
+st.write("Análise de reversão para meta de 5% de lucro.")
+
+if st.button("🔍 ESCANEAR 178 ATIVOS AGORA"):
+    with st.spinner("Buscando sinais no fechamento..."):
+        resultados = scan_mercado(ATIVOS_SCAN)
+        
+        if resultados:
+            st.success(f"Encontramos {len(resultados)} sinais!")
+            st.table(pd.DataFrame(resultados))
+            st.info("💡 **Dica:** O 'Stop Loss %' mostra quanto você aceita perder se o trade der errado. Se esse número for muito alto (ex: -10%), avalie se vale o risco.")
+        else:
+            st.warning("Mercado em tendência definida. Nenhum sinal de 'virada' (9.1) encontrado hoje.")
 
 st.sidebar.button("Sair", on_click=lambda: st.session_state.update({"logado": False}))
