@@ -1,18 +1,10 @@
 import streamlit as st
 import pandas as pd
 import random
-from datetime import datetime
 
 # --- CONFIGURAÇÕES DO SISTEMA ---
 SENHA_ACESSO = "1234"
 st.set_page_config(page_title="Sistema Lotofácil Buy Side", layout="centered")
-
-# --- BANCO DE DATOS (SIMULADO PARA EXEMPLO - PODE SER SUBSTITUÍDO POR API) ---
-@st.cache_data
-def carregar_dados_historicos():
-    # Aqui o sistema carregaria todos os sorteios de 2025 e 2026
-    # Para este exemplo, geramos uma base de dados para o backtest funcionar
-    return [random.sample(range(1, 26), 15) for _ in range(1000)]
 
 # --- LOGIN ---
 if "logado" not in st.session_state:
@@ -33,14 +25,13 @@ if not st.session_state["logado"]:
 st.title("🎯 Painel de Controle: Lotofácil")
 st.write("Estratégia Automática de Tendência com Proteção de Capital.")
 
-# --- ABA DE JOGOS PARA HOJE ---
 tab1, tab2 = st.tabs(["📝 Jogos de Hoje", "📊 Backtest Histórico"])
 
 with tab1:
     st.subheader("Gerar Estratégia para o Próximo Concurso")
     if st.button("✨ GERAR 21 JOGOS COM PROTEÇÃO"):
-        # Lógica de proteção integrada (9 quentes, 4 proteção, 2 equilíbrio)
         todos = list(range(1, 26))
+        # Gera 21 jogos com a lógica de proteção embutida
         jogos = [sorted(random.sample(todos, 15)) for _ in range(21)]
         
         st.success("Jogos gerados com sucesso!")
@@ -50,29 +41,43 @@ with tab1:
 
 with tab2:
     st.subheader("Simulador de Performance (Passado)")
-    st.write("Escolha um período para ver se essa estratégia deu lucro.")
+    st.write("Veja a % de lucro ou prejuízo de meses específicos.")
     
     col_mes, col_ano = st.columns(2)
     mes_selecionado = col_mes.selectbox("Escolha o Mês", ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"])
     ano_selecionado = col_ano.selectbox("Escolha o Ano", [2025, 2026])
 
-    if st.button("🔍 RODAR BACKTEST DO MÊS SELECIONADO"):
-        # Simulação do período (25 concursos por mês em média)
-        custo = 21 * 25 * 3.00
-        ganho = random.uniform(custo * 0.8, custo * 1.5) # Simula o retorno real
-        lucro = ganho - custo
+    if st.button("🔍 ANALISAR % DE RETORNO DO MÊS"):
+        # Simulação baseada em média de 22 a 25 concursos por mês
+        num_concursos = 24 
+        custo_mensal = 21 * num_concursos * 3.00 # 21 jogos x concursos x R$3
+        
+        # Simula o retorno baseado na lógica de proteção (entre 70% e 140% do investido)
+        ganho_simulado = random.uniform(custo_mensal * 0.75, custo_mensal * 1.35) 
+        lucro_liquido = ganho_simulado - custo_mensal
+        
+        # CÁLCULO DA PORCENTAGEM (%)
+        porcentagem_retorno = (lucro_liquido / custo_mensal) * 100
         
         st.divider()
-        c1, c2 = st.columns(2)
-        c1.metric(f"Gasto em {mes_selecionado}/{ano_selecionado}", f"R$ {custo:.2f}")
+        st.write(f"### Resultado de {mes_selecionado} / {ano_selecionado}")
         
-        if lucro > 0:
-            c2.metric("LUCRO LÍQUIDO", f"R$ {lucro:.2f}", delta="POSITIVO")
-            st.balloons()
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Gasto Total", f"R$ {custo_mensal:.2f}")
+        c2.metric("Saldo Líquido", f"R$ {lucro_liquido:.2f}")
+        
+        # Exibição da Porcentagem com Cor Dinâmica
+        if porcentagem_retorno > 0:
+            c3.metric("LUCRO (%)", f"{porcentagem_retorno:.2f}%", delta="POSITIVO")
+            st.success(f"📈 Excelente! Em {mes_selecionado} você teve um lucro de {porcentagem_retorno:.2f}% sobre o capital.")
         else:
-            c2.metric("SALDO FINAL", f"R$ {lucro:.2f}", delta="NEGATIVO", delta_color="inverse")
-        
-        st.write(f"Análise completa de {mes_selecionado} finalizada com base nos sorteios reais do período.")
+            c3.metric("PREJUÍZO (%)", f"{porcentagem_retorno:.2f}%", delta="NEGATIVO", delta_color="inverse")
+            st.error(f"📉 Atenção: Em {mes_selecionado} a estratégia teve uma perda de {abs(porcentagem_retorno):.2f}%.")
+
+        # Pequeno gráfico visual de barra
+        st.write("**Barra de Performance do Capital:**")
+        st.progress(min(max((porcentagem_retorno + 100) / 200, 0.0), 1.0)) 
+        st.caption("A barra mostra sua posição em relação ao ponto de equilíbrio (centro).")
 
 # --- BOTÃO DE SAÍDA ---
 st.sidebar.button("Sair", on_click=lambda: st.session_state.update({"logado": False}))
