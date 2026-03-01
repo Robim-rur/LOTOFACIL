@@ -5,15 +5,15 @@ import pandas_ta as ta
 
 # --- CONFIGURAÇÃO ---
 SENHA_ACESSO = "1234"
-st.set_page_config(page_title="Buy Side Scanner: 178 Ativos", layout="wide")
+st.set_page_config(page_title="Scanner Buy Side 178", layout="wide")
 
 # --- LOGIN ---
 if "logado" not in st.session_state:
     st.session_state["logado"] = False
 
 if not st.session_state["logado"]:
-    st.title("🌙 Terminal de Análise (Mercado Fechado)")
-    senha = st.text_input("Digite a Senha:", type="password")
+    st.title("🌙 Terminal Noturno")
+    senha = st.text_input("Senha:", type="password")
     if st.button("ACESSAR"):
         if senha == SENHA_ACESSO:
             st.session_state["logado"] = True
@@ -43,70 +43,37 @@ ATIVOS_SCAN = sorted(set([
     "KNCR11.SA","KNIP11.SA","CPTS11.SA","IRDM11.SA","DIVO11.SA","NDIV11.SA","SPUB11.SA"
 ]))
 
-# --- MOTOR DE ANÁLISE ---
-def scan_mercado(lista, cap_total):
+# --- INTERFACE ---
+st.title("🚀 Scanner Buy Side: Estratégia 5% Mensal")
+cap_usuario = st.sidebar.number_input("Capital Total (R$):", value=5000.0)
+
+if st.button("🔍 ESCANEAR OPORTUNIDADES AGORA"):
     encontrados = []
     barra = st.progress(0)
     
-    for i, t in enumerate(lista):
+    for i, t in enumerate(ATIVOS_SCAN):
         try:
             df = yf.download(t, period="30d", interval="1d", progress=False)
-            if len(df) < 5: continue
+            if len(df) < 15: continue
             
-            # Setup 9.1: Média Exponencial de 9
             df['EMA9'] = ta.ema(df['Close'], length=9)
             
-            # Condição de virada da média para cima
-            ema_hoje = df['EMA9'].iloc[-1]
-            ema_ontem = df['EMA9'].iloc[-2]
-            ema_antes = df['EMA9'].iloc[-3]
-            
-            if ema_hoje > ema_ontem and ema_ontem <= ema_antes:
-                preco = df['Close'].iloc[-1]
-                maxima = df['High'].iloc[-1]
-                minima = df['Low'].iloc[-1]
-                
-                # Gerenciamento de Risco: Aloca 5% do capital por trade
-                alocacao = cap_total * 0.05
-                qtd = int(alocacao / preco) if preco > 0 else 0
-                
+            # Setup 9.1 de Compra
+            if df['EMA9'].iloc[-1] > df['EMA9'].iloc[-2] and df['EMA9'].iloc[-2] <= df['EMA9'].iloc[-3]:
+                p = df['Close'].iloc[-1]
                 encontrados.append({
                     "Ticker": t.replace(".SA", ""),
-                    "Preço Atual": f"R$ {preco:.2f}",
-                    "Entrada (Start)": f"R$ {maxima + 0.01:.2f}",
-                    "Stop (Proteção)": f"R$ {minima - 0.01:.2f}",
-                    "Alvo (+5%)": f"R$ {preco * 1.05:.2f}",
-                    "Quanto Comprar": f"{qtd} cotas"
+                    "Preço": f"R$ {p:.2f}",
+                    "Entrada": f"R$ {df['High'].iloc[-1] + 0.01:.2f}",
+                    "Stop": f"R$ {df['Low'].iloc[-1] - 0.01:.2f}",
+                    "Alvo (+5%)": f"R$ {p * 1.05:.2f}"
                 })
-        except:
-            continue
-        barra.progress((i + 1) / len(lista))
-    return encontrados
-
-# --- INTERFACE ---
-st.title("🚀 Scanner Buy Side: Estratégia 5% Mensal")
-st.write(f"Analisando {len(ATIVOS_SCAN)} ativos em tempo real (Fechamento).")
-
-cap_usuario = st.sidebar.number_input("Capital para Operar (R$):", value=5000.0, step=500.0)
-
-# BACKTEST RESUMIDO
-st.subheader("📊 Histórico da Estratégia (2025/2026)")
-c1, c2, c3 = st.columns(3)
-c1.metric("Retorno Médio", "5.4% / mês", "Meta 5% OK")
-c2.metric("Acerto Médio", "67%", "Favorável")
-c3.metric("Frequência", "~4 sinais / semana", "Saudável")
-
-st.divider()
-
-if st.button("🔍 ESCANEAR OPORTUNIDADES AGORA"):
-    with st.spinner("Processando ativos... Isso pode levar alguns segundos."):
-        oportunidades = scan_mercado(ATIVOS_SCAN, cap_usuario)
-        
-        if oportunidades:
-            st.success(f"Sinais de Compra identificados em {len(oportunidades)} ativos!")
-            st.table(pd.DataFrame(oportunidades))
-            st.warning("📥 **Ação Sugerida:** Agende estas ordens na sua corretora hoje (Sábado/Noite) para execução no próximo pregão.")
-        else:
-            st.info("Nenhum sinal detectado nas 178 ações hoje. O capital deve permanecer em caixa.")
+        except: continue
+        barra.progress((i + 1) / len(ATIVOS_SCAN))
+    
+    if encontrados:
+        st.table(pd.DataFrame(encontrados))
+    else:
+        st.info("Nenhum sinal hoje.")
 
 st.sidebar.button("Sair", on_click=lambda: st.session_state.update({"logado": False}))
