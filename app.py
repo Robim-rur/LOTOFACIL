@@ -3,24 +3,41 @@ import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
 
-# --- CONFIGURAÇÃO ---
-SENHA_ACESSO = "1234"
-st.set_page_config(page_title="Scanner Buy Side Pro", layout="wide")
+# --- CAMADA 1: SEGURANÇA DE INTERFACE ---
+# Esconde menus do Streamlit para o usuário não tentar "espiar" o código
+st.set_page_config(page_title="Terminal Buy Side Pro", layout="wide", initial_sidebar_state="collapsed")
+hide_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+"""
+st.markdown(hide_style, unsafe_allow_html=True)
 
-# --- LOGIN ---
-if "logado" not in st.session_state:
-    st.session_state["logado"] = False
+# --- CAMADA 2: CONFIGURAÇÃO DA SENHA SEMANAL ---
+# Altere o valor entre aspas toda semana para renovar o aluguel
+SENHA_ATUAL = "SEMANA_01" 
 
-if not st.session_state["logado"]:
-    st.title("🌙 Terminal de Análise Noturna")
-    senha = st.text_input("Senha:", type="password")
-    if st.button("ACESSAR"):
-        if senha == SENHA_ACESSO:
-            st.session_state["logado"] = True
+# --- SISTEMA DE LOGIN ---
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
+
+if not st.session_state["autenticado"]:
+    st.title("🔐 Acesso Restrito - Terminal 178")
+    st.write("Insira sua chave de acesso semanal para liberar o scanner.")
+    entrada = st.text_input("Chave de Acesso:", type="password")
+    if st.button("Liberar Sistema"):
+        if entrada == SENHA_ATUAL:
+            st.session_state["autenticado"] = True
             st.rerun()
+        else:
+            st.error("Chave inválida ou expirada. Entre em contato com o administrador.")
     st.stop()
 
-# --- SUA LISTA DE 178 ATIVOS ---
+# --- ABAIXO DAQUI O USUÁRIO SÓ VÊ SE ACERTAR A SENHA ---
+
+# Sua lista de ativos protegida (dentro do código)
 ATIVOS_SCAN = sorted(set([
     "RRRP3.SA","ALOS3.SA","ALPA4.SA","ABEV3.SA","ARZZ3.SA","ASAI3.SA","AZUL4.SA","B3SA3.SA","BBAS3.SA","BBDC3.SA",
     "BBDC4.SA","BBSE3.SA","BEEF3.SA","BPAC11.SA","BRAP4.SA","BRFS3.SA","BRKM5.SA","CCRO3.SA","CMIG4.SA","CMIN3.SA",
@@ -43,56 +60,39 @@ ATIVOS_SCAN = sorted(set([
     "KNCR11.SA","KNIP11.SA","CPTS11.SA","IRDM11.SA","DIVO11.SA","NDIV11.SA","SPUB11.SA"
 ]))
 
-# --- MOTOR DE ANÁLISE ---
-def scan_mercado(lista):
+st.title("🚀 Scanner de Oportunidades (Buy Side)")
+st.write(f"Analisando {len(ATIVOS_SCAN)} ativos para meta de 5% mensal.")
+
+if st.button("🔍 INICIAR SCANNER"):
     encontrados = []
     barra = st.progress(0)
-    
-    for i, t in enumerate(lista):
+    for i, t in enumerate(ATIVOS_SCAN):
         try:
             df = yf.download(t, period="60d", interval="1d", progress=False)
-            if len(df) < 20: continue
-            
+            if len(df) < 15: continue
             df['EMA9'] = ta.ema(df['Close'], length=9)
-            
-            # Setup 9.1 de Compra (Virada da Média)
             if df['EMA9'].iloc[-1] > df['EMA9'].iloc[-2] and df['EMA9'].iloc[-2] <= df['EMA9'].iloc[-3]:
                 p_atual = df['Close'].iloc[-1]
                 p_entrada = df['High'].iloc[-1] + 0.01
                 p_stop = df['Low'].iloc[-1] - 0.01
-                
-                # Cálculo de Queda Prévia (Quanto caiu nos últimos 3 dias antes do sinal)
-                preco_3_dias_atras = df['High'].iloc[-4]
-                queda_previa = ((p_atual / preco_3_dias_atras) - 1) * 100
-                
-                # Cálculo do Risco da Operação (Distância do Stop)
-                risco_operacao = ((p_stop / p_entrada) - 1) * 100
-                
+                queda_previa = ((p_atual / df['High'].iloc[-4]) - 1) * 100
+                risco = ((p_stop / p_entrada) - 1) * 100
                 encontrados.append({
                     "Ativo": t.replace(".SA", ""),
-                    "Preço Fech.": f"R$ {p_atual:.2f}",
-                    "Queda Acumulada (%)": f"{queda_previa:.2f}%",
+                    "Preço": f"R$ {p_atual:.2f}",
+                    "Queda Acum.": f"{queda_previa:.2f}%",
                     "Entrada (Start)": f"R$ {p_entrada:.2f}",
                     "Alvo (+5%)": f"R$ {p_entrada * 1.05:.2f}",
-                    "Stop Loss (%)": f"{risco_operacao:.2f}%"
+                    "Stop Loss": f"{risco:.2f}%"
                 })
         except: continue
-        barra.progress((i + 1) / len(lista))
-    return encontrados
+        barra.progress((i + 1) / len(ATIVOS_SCAN))
+    
+    if encontrados:
+        st.table(pd.DataFrame(encontrados))
+    else:
+        st.info("Nenhum sinal detectado no último fechamento.")
 
-# --- INTERFACE ---
-st.title("🚀 Scanner de Oportunidades (Buy Side)")
-st.write("Análise de reversão para meta de 5% de lucro.")
-
-if st.button("🔍 ESCANEAR 178 ATIVOS AGORA"):
-    with st.spinner("Buscando sinais no fechamento..."):
-        resultados = scan_mercado(ATIVOS_SCAN)
-        
-        if resultados:
-            st.success(f"Encontramos {len(resultados)} sinais!")
-            st.table(pd.DataFrame(resultados))
-            st.info("💡 **Dica:** O 'Stop Loss %' mostra quanto você aceita perder se o trade der errado. Se esse número for muito alto (ex: -10%), avalie se vale o risco.")
-        else:
-            st.warning("Mercado em tendência definida. Nenhum sinal de 'virada' (9.1) encontrado hoje.")
-
-st.sidebar.button("Sair", on_click=lambda: st.session_state.update({"logado": False}))
+if st.sidebar.button("Logoff"):
+    st.session_state["autenticado"] = False
+    st.rerun()
